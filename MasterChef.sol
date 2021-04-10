@@ -52,13 +52,15 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Dev address.
     address public devaddr;
     // The max supply ever
-    uint256 public maxSupply;
+    uint256 public maxSupply = 30000 * 10 ** 18;
     // VOID tokens created per block.
-    uint256 public voidPerBlock;
+    uint256 public voidPerBlock = 0.01 - 10 ** 18;
     // Bonus muliplier for early void makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
     // Deposit Fee address
     address public feeAddress;
+    // Total VOID deposit by users
+    uint256 private voidDeposit = 0;
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
@@ -79,15 +81,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
         VoidToken _void,
         address _devaddr,
         address _feeAddress,
-        uint256 _maxSupply,
-        uint256 _voidPerBlock,
         uint256 _startBlock
     ) public {
         void = _void;
         devaddr = _devaddr;
         feeAddress = _feeAddress;
-        maxSupply = _maxSupply;
-        voidPerBlock = _voidPerBlock;
         startBlock = _startBlock;
     }
 
@@ -103,7 +101,6 @@ contract MasterChef is Ownable, ReentrancyGuard {
     }
 
     // Add a new lp to the pool. Can only be called by the owner.
-    // Thanks certik for auditing other code so this won't have the same issues :)
     function add(uint256 _allocPoint, IBEP20 _lpToken, uint16 _depositFeeBP, bool _withUpdate) public onlyOwner nonDuplicated(_lpToken) {
         require(_depositFeeBP <= 10000, "add: invalid deposit fee basis points");
         if (_withUpdate) {
@@ -174,6 +171,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
             return;
         }
         uint256 multiplier = getMultiplier(pool.lastRewardBlock, block.number);
+        pool.lastRewardBlock = block.number;
         if (multiplier == 0) {
             return;
         }
@@ -181,7 +179,6 @@ contract MasterChef is Ownable, ReentrancyGuard {
         void.mint(devaddr, voidReward.div(50)); // 2% dev fee
         void.mint(address(this), voidReward);
         pool.accVoidPerShare = pool.accVoidPerShare.add(voidReward.mul(1e18).div(lpSupply));
-        pool.lastRewardBlock = block.number;
     }
 
     // Deposit LP tokens to MasterChef for VOID allocation.
@@ -204,6 +201,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
             }else{
                 user.amount = user.amount.add(_amount);
             }
+            // Condition added to add void deposits
+            if (pool.lpToken == void){
+                voidDeposit = voidDeposit.add(_amount);
+            }
         }
         user.rewardDebt = user.amount.mul(pool.accVoidPerShare).div(1e18);
         emit Deposit(msg.sender, _pid, _amount);
@@ -222,6 +223,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
         if(_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
+            // Condition added to substract void deposit and burn the void received by reflection
+            if (pool.lpToken == void){
+                voidDeposit = voidDeposit.sub(_amount);
+                burnReflectedVoid();
+            }
         }
         user.rewardDebt = user.amount.mul(pool.accVoidPerShare).div(1e18);
         emit Withdraw(msg.sender, _pid, _amount);
@@ -235,6 +241,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
         user.amount = 0;
         user.rewardDebt = 0;
         pool.lpToken.safeTransfer(address(msg.sender), amount);
+        // Same condition added as in withdraw() function
+        if (pool.lpToken == void){
+            voidDeposit = voidDeposit.sub(amount);
+            burnReflectedVoid();
+        }
         emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
@@ -255,6 +266,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         require(msg.sender == devaddr, "dev: wut?");
         devaddr = _devaddr;
         emit SetDevAddress(msg.sender, _devaddr);
+    }
 
     function setFeeAddress(address _feeAddress) public{
         require(msg.sender == feeAddress, "setFeeAddress: FORBIDDEN");
@@ -262,10 +274,20 @@ contract MasterChef is Ownable, ReentrancyGuard {
         emit SetFeeAddress(msg.sender, _feeAddress);
     }
 
-    //Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
+    // Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
     function updateEmissionRate(uint256 _voidPerBlock) public onlyOwner {
         massUpdatePools();
+        require(_voidPerBlock<=10000000000000000000, "You cannot make VOID Per Block more than 10 VOID");
         voidPerBlock = _voidPerBlock;
         emit UpdateEmissionRate(msg.sender, _voidPerBlock);
+    }
+    
+    // Burn the void tokens received by reflection
+    function burnReflectedVoid() internal {
+        uint256 totalVoidBalance = void.balanceOf(address(this));
+        if(totalVoidBalance > voidDeposit) {
+            uint256 voidToBurn = totalVoidBalance.sub(voidDeposit);
+            safeVoidTransfer(0x000000000000000000000000000000000000dEaD, voidToBurn);
+        }
     }
 }
