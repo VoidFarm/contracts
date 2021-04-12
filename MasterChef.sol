@@ -188,8 +188,6 @@ contract MasterChef is Ownable, ReentrancyGuard {
             uint256 pending = user.amount.mul(pool.accVoidPerShare).div(1e18).sub(user.rewardDebt);
             if(pending > 0) {
                 safeVoidTransfer(msg.sender, pending);
-                // Burn the received void by reflection from the mint
-                burnReflectedVoid(pending);
             }
         }
         if(_amount > 0) {
@@ -215,16 +213,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 pending = user.amount.mul(pool.accVoidPerShare).div(1e18).sub(user.rewardDebt);
         if(pending > 0) {
             safeVoidTransfer(msg.sender, pending);
-            // Burn the received void by reflection from the mint
-            burnReflectedVoid(pending);
         }
         if(_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
-            // Condition added to burn the received void by reflection from deposits
-            if (pool.lpToken == void){
-                burnReflectedVoid(_amount);
-            }
         }
         user.rewardDebt = user.amount.mul(pool.accVoidPerShare).div(1e18);
         emit Withdraw(msg.sender, _pid, _amount);
@@ -238,10 +230,6 @@ contract MasterChef is Ownable, ReentrancyGuard {
         user.amount = 0;
         user.rewardDebt = 0;
         pool.lpToken.safeTransfer(address(msg.sender), amount);
-        // Same condition added as in withdraw() function
-        if (pool.lpToken == void){
-            burnReflectedVoid(amount);
-        }
         emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
@@ -276,14 +264,5 @@ contract MasterChef is Ownable, ReentrancyGuard {
         require(_voidPerBlock<=10000000000000000000, "You cannot make VOID Per Block more than 10 VOID");
         voidPerBlock = _voidPerBlock;
         emit UpdateEmissionRate(msg.sender, _voidPerBlock);
-    }
-    
-    // Burn the void tokens received by reflection
-    function burnReflectedVoid(uint256 _amount) internal {
-        uint256 voidToBurn = _amount.div(void.getRate()).sub(_amount);
-        uint256 totalVoidBalance = void.balanceOf(address(this));
-        if(totalVoidBalance >= voidToBurn) {
-            safeVoidTransfer(0x000000000000000000000000000000000000dEaD, voidToBurn);
-        }
     }
 }

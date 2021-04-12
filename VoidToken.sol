@@ -17,7 +17,7 @@ contract VoidToken is Context, IBEP20, Ownable {
 
     uint8 private constant _decimals = 18;
     uint256 private constant MAX = ~uint128(0);
-    uint256 private _tTotal = 20 * 10 ** uint256(_decimals); // Initial supply
+    uint256 private _tTotal = 10 ** uint256(_decimals); // Initial supply
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
     uint256 private _tBurnTotal;
@@ -74,7 +74,7 @@ contract VoidToken is Context, IBEP20, Ownable {
     function balanceOf(address account) public view override returns (uint256) {
         uint256 rAmount = _rOwned[account];
         require(rAmount <= _rTotal, "Amount must be less than total reflections");
-        uint256 currentRate =  getRate();
+        uint256 currentRate =  _getRate();
         return rAmount.div(currentRate);
     }
 
@@ -221,7 +221,7 @@ contract VoidToken is Context, IBEP20, Ownable {
      * @dev Transfers token without any fees
      */
     function _transferNoFees(address sender, address recipient, uint256 amount) private {
-        uint256 currentRate =  getRate();
+        uint256 currentRate =  _getRate();
         uint256 rAmount = amount.mul(currentRate);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
         _rOwned[recipient] = _rOwned[recipient].add(rAmount);
@@ -232,7 +232,7 @@ contract VoidToken is Context, IBEP20, Ownable {
      * @dev Transfers token with reflection fees
      */
     function _transferFees(address sender, address recipient, uint256 tAmount) private {
-        uint256 currentRate =  getRate();
+        uint256 currentRate =  _getRate();
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee, uint256 tTransferAmount, uint256 tFee, uint256 tBurn) = _getValues(tAmount);
         uint256 rBurn =  tBurn.mul(currentRate);
         _rOwned[sender] = _rOwned[sender].sub(rAmount);
@@ -253,7 +253,7 @@ contract VoidToken is Context, IBEP20, Ownable {
 
     function _getValues(uint256 tAmount) private view returns (uint256, uint256, uint256, uint256, uint256, uint256) {
         (uint256 tTransferAmount, uint256 tFee, uint256 tBurn) = _getTValues(tAmount, _taxFee, _burnFee);
-        uint256 currentRate =  getRate();
+        uint256 currentRate =  _getRate();
         (uint256 rAmount, uint256 rTransferAmount, uint256 rFee) = _getRValues(tAmount, tFee, tBurn, currentRate);
         return (rAmount, rTransferAmount, rFee, tTransferAmount, tFee, tBurn);
     }
@@ -273,7 +273,7 @@ contract VoidToken is Context, IBEP20, Ownable {
         return (rAmount, rTransferAmount, rFee);
     }
 
-    function getRate() public view returns(uint256) {
+    function _getRate() private view returns(uint256) {
         return _rTotal.div(_tTotal);
     }
 
@@ -330,7 +330,7 @@ contract VoidToken is Context, IBEP20, Ownable {
     function _mint(address account, uint256 amount) internal {
         require(account != address(0), "BEP20: mint to the zero address");
 
-        uint256 currentRate =  getRate();
+        uint256 currentRate =  _getRate();
         uint256 rAmount = amount.mul(currentRate);
         _rTotal = _rTotal.add(rAmount);
         _tTotal = _tTotal.add(amount);
