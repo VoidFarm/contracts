@@ -54,7 +54,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // The max supply ever
     uint256 public maxSupply = 30000 * 10 ** 18;
     // VOID tokens created per block.
-    uint256 public voidPerBlock = 0.01 - 10 ** 18;
+    uint256 public voidPerBlock = 0.01 * 10 ** 18;
     // Bonus muliplier for early void makers.
     uint256 public constant BONUS_MULTIPLIER = 1;
     // Deposit Fee address
