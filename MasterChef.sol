@@ -290,7 +290,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Burn the void tokens received by reflection
     function burnReflectedVoid() internal {
         uint256 totalVoidBalance = void.balanceOf(address(this));
-        if(totalVoidBalance > voidDeposit) {
+        if(totalVoidBalance >= voidDeposit) {
             uint256 voidToBurn = totalVoidBalance.sub(voidDeposit);
             safeVoidTransfer(0x000000000000000000000000000000000000dEaD, voidToBurn);
         }
