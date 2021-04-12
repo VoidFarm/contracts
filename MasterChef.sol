@@ -59,6 +59,8 @@ contract MasterChef is Ownable, ReentrancyGuard {
     uint256 public constant BONUS_MULTIPLIER = 1;
     // Deposit Fee address
     address public feeAddress;
+    // Total VOID in contract from deposits and rewards
+    uint256 private voidDeposit = 0;
 
     // Info of each pool.
     PoolInfo[] public poolInfo;
@@ -92,7 +94,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     }
 
     mapping(IBEP20 => bool) public poolExistence;
-    
+
     modifier nonDuplicated(IBEP20 _lpToken) {
         require(poolExistence[_lpToken] == false, "nonDuplicated: duplicated");
         _;
@@ -176,6 +178,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 voidReward = multiplier.mul(voidPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
         void.mint(devaddr, voidReward.div(50)); // 2% dev fee
         void.mint(address(this), voidReward);
+        voidDeposit = voidDeposit.add(voidReward); // Add void minted
         pool.accVoidPerShare = pool.accVoidPerShare.add(voidReward.mul(1e18).div(lpSupply));
     }
 
@@ -188,6 +191,8 @@ contract MasterChef is Ownable, ReentrancyGuard {
             uint256 pending = user.amount.mul(pool.accVoidPerShare).div(1e18).sub(user.rewardDebt);
             if(pending > 0) {
                 safeVoidTransfer(msg.sender, pending);
+                // Substract void reward
+                voidDeposit = voidDeposit.sub(pending);
             }
         }
         if(_amount > 0) {
@@ -198,6 +203,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
                 pool.lpToken.safeTransfer(feeAddress, depositFee);
             }else{
                 user.amount = user.amount.add(_amount);
+            }
+            // Condition added to add void deposits
+            if (pool.lpToken == void){
+                voidDeposit = voidDeposit.add(_amount);
             }
         }
         user.rewardDebt = user.amount.mul(pool.accVoidPerShare).div(1e18);
@@ -213,10 +222,17 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 pending = user.amount.mul(pool.accVoidPerShare).div(1e18).sub(user.rewardDebt);
         if(pending > 0) {
             safeVoidTransfer(msg.sender, pending);
+            // Substract void reward
+            voidDeposit = voidDeposit.sub(pending);
         }
         if(_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
+            // Condition added to substract void deposit and burn the void received by reflection
+            if (pool.lpToken == void){
+                voidDeposit = voidDeposit.sub(_amount);
+                burnReflectedVoid();
+            }
         }
         user.rewardDebt = user.amount.mul(pool.accVoidPerShare).div(1e18);
         emit Withdraw(msg.sender, _pid, _amount);
@@ -230,6 +246,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
         user.amount = 0;
         user.rewardDebt = 0;
         pool.lpToken.safeTransfer(address(msg.sender), amount);
+        // Same condition added as in withdraw() function
+        if (pool.lpToken == void){
+            voidDeposit = voidDeposit.sub(amount);
+            burnReflectedVoid();
+        }
         emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
@@ -264,5 +285,14 @@ contract MasterChef is Ownable, ReentrancyGuard {
         require(_voidPerBlock<=10000000000000000000, "You cannot make VOID Per Block more than 10 VOID");
         voidPerBlock = _voidPerBlock;
         emit UpdateEmissionRate(msg.sender, _voidPerBlock);
+    }
+
+    // Burn the void tokens received by reflection
+    function burnReflectedVoid() internal {
+        uint256 totalVoidBalance = void.balanceOf(address(this));
+        if(totalVoidBalance > voidDeposit) {
+            uint256 voidToBurn = totalVoidBalance.sub(voidDeposit);
+            safeVoidTransfer(0x000000000000000000000000000000000000dEaD, voidToBurn);
+        }
     }
 }

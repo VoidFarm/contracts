@@ -17,7 +17,7 @@ contract VoidToken is Context, IBEP20, Ownable {
 
     uint8 private constant _decimals = 18;
     uint256 private constant MAX = ~uint128(0);
-    uint256 private _tTotal = 10 ** uint256(_decimals); // Initial supply
+    uint256 private _tTotal = 20 * 10 ** uint256(_decimals); // Initial supply
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
     uint256 private _tBurnTotal;
