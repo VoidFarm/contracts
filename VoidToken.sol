@@ -25,8 +25,8 @@ contract VoidToken is Context, IBEP20, Ownable {
     string private constant _name = 'Void Token';
     string private constant _symbol = 'VOID';
 
-    uint256 private _taxFee = 200;
-    uint256 private _burnFee = 200;
+    uint256 private constant _taxFee = 200;
+    uint256 private constant _burnFee = 200;
 
     constructor () public {
         _rOwned[_msgSender()] = _rTotal;
@@ -207,7 +207,6 @@ contract VoidToken is Context, IBEP20, Ownable {
     function _transfer(address sender, address recipient, uint256 amount) private {
         require(sender != address(0), "BEP20: transfer from the zero address");
         require(recipient != address(0), "BEP20: transfer to the zero address");
-        require(amount > 0, "Transfer amount must be greater than zero");
 
         if (recipient == owner() || sender == owner()) {
             // This should only be used to deposit and withdraw from the pool.
@@ -280,14 +279,14 @@ contract VoidToken is Context, IBEP20, Ownable {
     /**
      * @dev Returns the tax fee
      */
-    function _getTaxFee() public view returns(uint256) {
+    function getTaxFee() public pure returns(uint256) {
         return _taxFee;
     }
 
     /**
      * @dev Returns the burn fee
      */
-    function _getBurnFee() public view returns(uint256) {
+    function getBurnFee() public pure returns(uint256) {
         return _burnFee;
     }
 
@@ -336,5 +335,21 @@ contract VoidToken is Context, IBEP20, Ownable {
         _tTotal = _tTotal.add(amount);
         _rOwned[account] = _rOwned[account].add(rAmount);
         emit Transfer(address(0), account, amount);
+    }
+
+    /**
+     * @dev Burn tokens received
+     */
+    function burn(uint256 tBurn) public returns (bool){
+        address account = _msgSender();
+        require(balanceOf(account) >= tBurn, "Balance less than burn");
+        uint256 currentRate =  _getRate();
+        uint256 rBurn = tBurn.mul(currentRate);
+        _rOwned[account] = _rOwned[account].sub(rBurn);
+        _rTotal = _rTotal.sub(rBurn);
+        _tBurnTotal = _tBurnTotal.add(tBurn);
+        _tTotal = _tTotal.sub(tBurn);
+        emit Transfer(account, address(0), tBurn);
+        return true;
     }
 }

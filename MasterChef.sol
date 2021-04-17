@@ -52,7 +52,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Dev address.
     address public devaddr;
     // The max supply ever
-    uint256 public maxSupply = 30000 * 10 ** 18;
+    uint256 public constant maxSupply = 30000 * 10 ** 18;
     // VOID tokens created per block.
     uint256 public voidPerBlock = 0.01 * 10 ** 18;
     // Bonus muliplier for early void makers.
@@ -176,7 +176,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
             return;
         }
         uint256 voidReward = multiplier.mul(voidPerBlock).mul(pool.allocPoint).div(totalAllocPoint);
-        void.mint(devaddr, voidReward.div(50)); // 2% dev fee
+        if (void.totalSupply().add(voidReward) > maxSupply) {
+            voidReward = maxSupply.sub(void.totalSupply());
+        }
+        uint256 voidToDev = voidReward.div(50);
+        voidReward = voidReward.sub(voidToDev);
+        void.mint(devaddr, voidToDev); // 2% dev fee.
         void.mint(address(this), voidReward);
         voidDeposit = voidDeposit.add(voidReward); // Add void minted
         pool.accVoidPerShare = pool.accVoidPerShare.add(voidReward.mul(1e18).div(lpSupply));
@@ -191,8 +196,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
             uint256 pending = user.amount.mul(pool.accVoidPerShare).div(1e18).sub(user.rewardDebt);
             if(pending > 0) {
                 safeVoidTransfer(msg.sender, pending);
-                // Substract void reward
-                voidDeposit = voidDeposit.sub(pending);
+                voidDeposit = voidDeposit.sub(pending); // Subtract void reward
             }
         }
         if(_amount > 0) {
@@ -222,13 +226,12 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 pending = user.amount.mul(pool.accVoidPerShare).div(1e18).sub(user.rewardDebt);
         if(pending > 0) {
             safeVoidTransfer(msg.sender, pending);
-            // Substract void reward
-            voidDeposit = voidDeposit.sub(pending);
+            voidDeposit = voidDeposit.sub(pending); // Subtract void reward
         }
         if(_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
-            // Condition added to substract void deposit and burn the void received by reflection
+            // Condition added to subtract void deposit and burn the void received by reflection
             if (pool.lpToken == void){
                 voidDeposit = voidDeposit.sub(_amount);
                 burnReflectedVoid();
@@ -269,12 +272,14 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Update dev address by the previous dev.
     function dev(address _devaddr) public {
         require(msg.sender == devaddr, "dev: wut?");
+        require(_devaddr != address(0), "new dev cannot be the zero address");
         devaddr = _devaddr;
         emit SetDevAddress(msg.sender, _devaddr);
     }
 
     function setFeeAddress(address _feeAddress) public{
         require(msg.sender == feeAddress, "setFeeAddress: FORBIDDEN");
+        require(_feeAddress != address(0), "new feeAddress cannot be the zero address");
         feeAddress = _feeAddress;
         emit SetFeeAddress(msg.sender, _feeAddress);
     }
@@ -282,7 +287,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Pancake has to add hidden dummy pools inorder to alter the emission, here we make it simple and transparent to all.
     function updateEmissionRate(uint256 _voidPerBlock) public onlyOwner {
         massUpdatePools();
-        require(_voidPerBlock<=10000000000000000000, "You cannot make VOID Per Block more than 10 VOID");
+        require(_voidPerBlock<=10000000000000000000, "You cannot make VOID Per Block more than 10 VOID"); // Clarified in documentation
         voidPerBlock = _voidPerBlock;
         emit UpdateEmissionRate(msg.sender, _voidPerBlock);
     }
@@ -290,9 +295,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Burn the void tokens received by reflection
     function burnReflectedVoid() internal {
         uint256 totalVoidBalance = void.balanceOf(address(this));
+        bool burnSuccess = false;
         if(totalVoidBalance >= voidDeposit) {
             uint256 voidToBurn = totalVoidBalance.sub(voidDeposit);
-            safeVoidTransfer(0x000000000000000000000000000000000000dEaD, voidToBurn);
+            burnSuccess = void.burn(voidToBurn);
         }
     }
 }
